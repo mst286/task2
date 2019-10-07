@@ -1,0 +1,158 @@
+---
+title: "task2"
+author: "Mattia Storero"
+date: "4/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+```
+
+
+
+```{r, include=FALSE}
+#download packages
+library(tidyverse)
+library(plyr)
+library(rvest)
+library(dplyr)
+library(kableExtra)
+```
+
+## Background
+
+The dataframe was taken from "https://w2.brreg.no/kunngjoring/kombisok.jsp?datoFra=01.01.2019&datoTil=25.09.2019&id_region=100&id_fylke=-+-+-&id_niva1=2&id_bransje1=0" selecting dates from 01/01/2019 to 25/09/2019. Furthermore, there were selected two other options: "Nord Norge" and "Nyregistrering".
+
+```{r, include=FALSE}
+#download data and putting them in a table
+url1 <- read_html("https://w2.brreg.no/kunngjoring/kombisok.jsp?datoFra=01.01.2019&datoTil=25.09.2019&id_region=100&id_fylke=-+-+-&id_niva1=2&id_bransje1=0")
+data_pre <- html_nodes(url1, xpath = "//table")
+data <- as.data.frame(html_table(html_nodes(data_pre, "table")))
+
+```
+## Analysis
+Firstly, the datas were cleaned in order to make them clearer. The columns were renamed and the empty ones were deleted. The problem was to add the county variable and split the big dataframe in 3 smallers. 
+
+```{r, include=FALSE}
+#change names and delete the ones we don't need
+names(data) <- c("x1","Name","county","Value","X5","Data","X7","Status")
+cleaned_data <- data[,c("Name","county","Value","Data","Status")]
+
+
+```
+
+
+```{r, include=FALSE}
+
+
+nordland_1 <- which(grepl("Nordland", cleaned_data$county))
+troms_2 <- which(grepl("Troms", cleaned_data$county))
+finnmark_3 <- which(grepl("Finnmark", cleaned_data$county))
+cleaned_data$county[c(nordland_1:troms_2-1)] <- "Nordland"
+cleaned_data$county[c(troms_2:finnmark_3-1)] <- "Troms"
+cleaned_data$county[c(finnmark_3:nrow(cleaned_data))] <- "Finnmark"
+
+```
+
+
+```{r, include=FALSE}
+#delete rows with no values
+cleaned_data[rowSums(is.na(cleaned_data))!=ncol(cleaned_data), ]
+cleaned_data[complete.cases(cleaned_data),]
+cleaned_data[rowSums(cleaned_data=="")!=ncol(cleaned_data), ]
+cleaned_data
+cl_data <- cleaned_data[-c(1:6,1061:1061,1814:1815,2227),]
+```
+
+```{r, include=FALSE}
+#changing date variable
+cl_data <- cl_data %>% mutate(date = as.Date(Data,format("%d.%m.%Y")),
+         county = as.factor(county),
+         Value = as.factor(Value),
+         Name = as.factor(Name),
+         Status = as.factor(Status))
+
+```
+
+```{r, include=FALSE}
+#splitting it in 3 depending on the county variable
+data_split <- split(cl_data, cl_data$county)
+
+```
+
+
+
+```{r, include=FALSE}
+#prepare data for the table and plot
+cl_plot <- cl_data %>%
+  mutate(month = lubridate::month(date)) %>%
+  mutate(month = paste0("2019","-",month,"-","01")) %>%
+  mutate(month = lubridate::ymd(month)) %>%
+  ddply(c("county", "month"), summarise, n=as.numeric(length(Name)))
+
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#table
+kable(cl_plot) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+```{r, include=FALSE}
+#dividing in 3
+cl_finn <- cl_plot[1:9,]
+cl_nord <- cl_plot[10:18,]
+cl_trom <- cl_plot[19:27,]
+```
+## Plotting
+
+After putting one heading per county (Nordland, Troms and Finnmark), the data were analysed in order to find out how many companies have been registered per month and per county. For this reason, a plot will be created.
+
+
+
+
+```{r, echo=FALSE, warning=FALSE}
+#plot
+p1 <- ggplot() + 
+  geom_line(aes(y = n, x = month, color = county),
+      data = cl_finn, stat="identity") +
+  labs(x="month", y="n") +
+  ggtitle("Number of companies registrations per month in Finnmark") + scale_y_continuous(limits = c(20, 70)) + scale_x_date(date_breaks = "1 month",
+                        date_labels = "%m")+ theme(axis.text.x = element_text(angle = 90)) + geom_point(aes(y = n, x = month, color = "number/month"), data = cl_finn, stat="identity")+ geom_line(aes(y=n, x=month, color = "Finnmark"), data = cl_finn) +
+           theme(legend.title=element_blank())
+
+p1
+```
+
+
+```{r, echo=FALSE, warning=FALSE}
+p2 <- ggplot() + 
+  geom_line(aes(y = n, x = month, color = county),
+      data = cl_nord, stat="identity") +
+  labs(x="month", y="n") +
+  ggtitle("Number of companies registrations per month in Nordland") + scale_y_continuous(limits = c(80, 150)) + scale_x_date(date_breaks = "1 month",
+                        date_labels = "%m")+ theme(axis.text.x = element_text(angle = 90)) + geom_point(aes(y = n, x = month, color = "number/month"), data = cl_nord, stat="identity")+ geom_line(aes(y=n, x=month, color = "Nordland"), data = cl_nord) +
+           theme(legend.title=element_blank())
+
+p2
+```
+
+
+```{r, echo=FALSE, warning=FALSE}
+p3 <- ggplot() + 
+  geom_line(aes(y = n, x = month, color = county),
+      data = cl_trom, stat="identity") +
+  labs(x="month", y="n") +
+  ggtitle("Number of companies registrations per month in Troms") + scale_y_continuous(limits = c(60, 130)) + scale_x_date(date_breaks = "1 month",
+                        date_labels = "%m")+ theme(axis.text.x = element_text(angle = 90)) + geom_point(aes(y = n, x = month, color = "number/month"), data = cl_trom, stat="identity")+ geom_line(aes(y=n, x=month, color = "Troms"), data = cl_trom) +
+           theme(legend.title=element_blank())
+
+p3
+```
+
+
